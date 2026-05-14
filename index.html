@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Super Mario Pro: Kawaii Edition + Touch Controls</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { margin: 0; background: #ffebee; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Courier New', Courier, monospace; touch-action: none; }
+        canvas { background: linear-gradient(to bottom, #a1c4fd 0%, #c2e9fb 100%); border: 8px solid #fff; border-radius: 20px; box-shadow: 0 0 50px rgba(255, 182, 193, 0.6); max-width: 100%; max-height: 100%; }
+        
+        #hud { position: absolute; top: 20px; width: 90%; max-width: 780px; display: flex; justify-content: space-between; color: #ff6b6b; font-size: 18px; text-shadow: 2px 2px #fff; z-index: 5; font-weight: bold; pointer-events: none; }
+        
+        #menu-overlay, #game-over-overlay { 
+            position: absolute; width: 100%; height: 100%; max-width: 800px; max-height: 450px;
+            background: rgba(255, 255, 255, 0.9); display: flex; 
+            flex-direction: column; justify-content: center; 
+            align-items: center; z-index: 100; border-radius: 20px;
+        }
+
+        #game-over-overlay { display: none; background: rgba(255, 107, 107, 0.9); }
+        #game-over-overlay h1 { color: white; text-shadow: 3px 3px #ff85a1; }
+
+        h1 { color: #ff6b6b; font-size: clamp(30px, 8vw, 50px); margin-bottom: 20px; text-shadow: 3px 3px #ffd1d1; text-align: center; }
+        .btn { 
+            background: #ff85a1; color: white; border: none; padding: 12px 30px; 
+            margin: 10px; font-size: 18px; cursor: pointer; border-radius: 50px;
+            font-family: 'Courier New'; font-weight: bold; width: 250px; transition: 0.2s;
+            box-shadow: 0 4px #ff5c8a;
+        }
+        .btn:hover { background: #ff5c8a; transform: translateY(-2px); }
+        .btn:active { transform: translateY(2px); box-shadow: none; }
+        .btn-resume { background: #74b9ff; box-shadow: 0 4px #0984e3; display: none; }
+        select { padding: 10px; border: 2px solid #ff85a1; border-radius: 10px; color: #ff85a1; font-weight: bold; }
+        .controls-hint { color: #ff85a1; font-size: 14px; margin-top: 20px; opacity: 0.8; text-align: center; }
+
+        /* CSS KHUSUS TOMBOL HP */
+        .touch-controls {
+            position: absolute; bottom: 30px; width: 100%; display: none;
+            justify-content: space-between; padding: 0 40px; box-sizing: border-box; z-index: 200;
+        }
+        .control-group { display: flex; gap: 20px; }
+        .touch-btn {
+            width: 70px; height: 70px; background: rgba(255, 255, 255, 0.4);
+            border: 4px solid #fff; border-radius: 50%; display: flex;
+            justify-content: center; align-items: center; font-size: 32px;
+            color: #ff6b6b; font-weight: bold; user-select: none; touch-action: none;
+            box-shadow: 0 4px rgba(0,0,0,0.1);
+        }
+        .touch-btn:active { background: rgba(255, 133, 161, 0.8); color: white; transform: scale(0.9); }
+
+        /* TAMPILKAN TOMBOL JIKA DISENTUH/MOBILE */
+        @media (pointer: coarse) {
+            .touch-controls { display: flex; }
+            .controls-hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div>BABY MARIO<br><span id="score">000000</span></div>
+        <div>SWEETS<br>x <span id="coins">0</span></div>
+        <div>HEARTS<br>x <span id="lives">3</span></div>
+        <div>WORLD<br><span id="lvlDisplay">1-1</span></div>
+    </div>
+
+    <div id="menu-overlay">
+        <h1>✨ KAWAII MARIO ✨</h1>
+        <button id="resumeBtn" class="btn btn-resume" onclick="togglePause()">LANJUT MAIN</button>
+        <button class="btn" onclick="startGame()">MULAI PETUALANGAN</button>
+        <div style="color:#ff85a1; margin-top:10px; font-weight: bold;">
+            PILIH DUNIA: 
+            <select id="lvlSelect">
+                <option value="1">Sunny Garden 1-1</option>
+                <option value="2">Candy Land 1-2</option>
+                <option value="3">Blue Sky 1-3</option>
+                <option value="4">Pink Palace 1-4</option>
+                <option value="5">Dream World 1-5</option>
+            </select>
+        </div>
+        <div class="controls-hint">Panah: Gerak | Spasi: Lompat & Double Jump | P: Pause</div>
+    </div>
+
+    <div id="game-over-overlay">
+        <h1>💔 GAME OVER 💔</h1>
+        <div id="finalScore" style="color: white; font-weight: bold; margin-bottom: 20px;">SKOR AKHIR: 0</div>
+        <button class="btn" onclick="retryGame()" style="background: white; color: #ff6b6b; box-shadow: 0 4px #fab1a0;">COBA LAGI</button>
+        <button class="btn" onclick="backToMenu()" style="background: #74b9ff; color: white; box-shadow: 0 4px #0984e3;">MENU UTAMA</button>
+    </div>
+
+    <div id="msg" style="position: absolute; color: #ff6b6b; font-size: 60px; display: none; text-shadow: 4px 4px #fff; font-weight: 900; z-index: 10; pointer-events: none;">YAY! CLEAR! ✨</div>
+    
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- TOMBOL KONTROL UNTUK HP -->
+    <div class="touch-controls">
+        <div class="control-group">
+            <div class="touch-btn" id="btnLeft">←</div>
+            <div class="touch-btn" id="btnRight">→</div>
+        </div>
+        <div class="control-group">
+            <div class="touch-btn" id="btnJump" style="background: rgba(116, 185, 255, 0.6); width: 85px; height: 85px; font-size: 40px;">↑</div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+canvas.width = 800; canvas.height = 450;
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let bgmOsc = null;
+
+function playSound(type) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+
+    switch(type) {
+        case 'jump':
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.exponentialRampToValueAtTime(800, now + 0.15);
+            gain.gain.setValueAtTime(0.3, now); 
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            osc.start(); osc.stop(now + 0.15);
+            break;
+        case 'doubleJump':
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(500, now);
+            osc.frequency.exponentialRampToValueAtTime(1000, now + 0.1);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(); osc.stop(now + 0.1);
+            break;
+        case 'coin':
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(987, now);
+            osc.frequency.setValueAtTime(1318, now + 0.07);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            osc.start(); osc.stop(now + 0.3);
+            break;
+        case 'stomp':
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.linearRampToValueAtTime(50, now + 0.1);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+            osc.start(); osc.stop(now + 0.1);
+            break;
+        case 'powerup':
+            osc.type = 'sine';
+            [440, 554, 659, 880].forEach((f, i) => {
+                osc.frequency.setValueAtTime(f, now + i * 0.05);
+            });
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+            osc.start(); osc.stop(now + 0.4);
+            break;
+        case 'hurt':
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.linearRampToValueAtTime(100, now + 0.2);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+            osc.start(); osc.stop(now + 0.2);
+            break;
+        case 'gameover':
+            stopBGM();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.setValueAtTime(300, now + 0.2);
+            osc.frequency.setValueAtTime(200, now + 0.4);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.8);
+            osc.start(); osc.stop(now + 0.8);
+            break;
+    }
+}
+
+function startBGM() {
+    if(bgmOsc) return;
+    const melody = [261, 329, 392, 523, 0, 392, 0, 440, 493, 523, 0, 261];
+    const bass = [130, 130, 164, 164, 196, 196, 174, 174];
+    let step = 0;
+    
+    function playNote() {
+        if(gameState !== "PLAY") return;
+        const now = audioCtx.currentTime;
+        let note = melody[step % melody.length];
+        if(note !== 0) {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'square';
+            o.frequency.setValueAtTime(note, now);
+            o.connect(g); g.connect(audioCtx.destination);
+            g.gain.setValueAtTime(0.06, now); 
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+            o.start(); o.stop(now + 0.2);
+        }
+        if(step % 2 === 0) {
+            const ob = audioCtx.createOscillator();
+            const gb = audioCtx.createGain();
+            ob.type = 'triangle';
+            ob.frequency.setValueAtTime(bass[(step/2) % bass.length], now);
+            ob.connect(gb); gb.connect(audioCtx.destination);
+            gb.gain.setValueAtTime(0.08, now);
+            gb.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            ob.start(); ob.stop(now + 0.3);
+        }
+        step++;
+        setTimeout(playNote, 150);
+    }
+    playNote();
+    bgmOsc = true;
+}
+
+function stopBGM() { bgmOsc = null; }
+
+let score = 0, coinCount = 0, currentLvl = 1, lives = 3, cameraX = 0;
+let gameState = "MENU";
+let gameStarted = false;
+let animTimer = 0;
+const gravity = 0.5;
+const keys = {};
+
+let player = {
+    x: 100, y: 300, w: 34, h: 34, dx: 0, dy: 0, 
+    jump: -11, grounded: false, facing: "right",
+    isBig: false, invul: 0, victoryTimer: 0,
+    canDoubleJump: false 
+};
+
+let particles = [];
+let clouds = [];
+for(let i=0; i<15; i++) clouds.push({x: Math.random()*5000, y: Math.random()*180, s: 0.8 + Math.random(), speed: 0.2 + Math.random()*0.5});
+
+let world;
+
+function startGame() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    currentLvl = parseInt(document.getElementById("lvlSelect").value);
+    score = 0; coinCount = 0; lives = 3;
+    updateHUD();
+    world = generateLevel(currentLvl);
+    resetPlayer();
+    gameState = "PLAY";
+    gameStarted = true;
+    startBGM();
+    document.getElementById("menu-overlay").style.display = "none";
+    document.getElementById("game-over-overlay").style.display = "none";
+    document.getElementById("resumeBtn").style.display = "block";
+}
+
+function retryGame() {
+    lives = 3; score = 0; coinCount = 0;
+    updateHUD();
+    world = generateLevel(currentLvl);
+    resetPlayer();
+    gameState = "PLAY";
+    startBGM();
+    document.getElementById("game-over-overlay").style.display = "none";
+}
+
+function backToMenu() {
+    gameStarted = false;
+    document.getElementById("game-over-overlay").style.display = "none";
+    document.getElementById("menu-overlay").style.display = "flex";
+    document.getElementById("resumeBtn").style.display = "none";
+}
+
+function updateHUD() {
+    document.getElementById("score").innerText = score.toString().padStart(6, '0');
+    document.getElementById("coins").innerText = coinCount;
+    document.getElementById("lives").innerText = lives;
+    document.getElementById("lvlDisplay").innerText = `1-${currentLvl}`;
+}
+
+function togglePause() {
+    if(!gameStarted || gameState === "GAMEOVER") return;
+    gameState = (gameState === "PLAY") ? "PAUSED" : "PLAY";
+    if(gameState === "PLAY") startBGM();
+    document.getElementById("menu-overlay").style.display = (gameState === "PAUSED") ? "flex" : "none";
+}
+
+function generateLevel(lvl) {
+    let platforms = [{x: 0, y: 400, w: 800, h: 50, t: 'g'}]; 
+    let enemies = [], items = [], fx = [], coins = [], airEnemies = []; 
+    let length = 2500 + (lvl * 500);
+
+    for (let i = 750; i < length; i += 150) {
+        let rand = Math.random();
+        if (Math.random() > 0.12) platforms.push({x: i, y: 400, w: 350, h: 50, t: 'g'});
+        if (Math.random() > 0.4) coins.push({x: i + 50, y: 300, gathered: false});
+        
+        if (Math.random() < 0.2) {
+            airEnemies.push({x: i + 100, baseY: 150, y: 150, dy: 2, dead: false});
+        }
+
+        if (rand < 0.2) { 
+            let boxType = Math.random() < 0.3 ? 'm' : 'c';
+            platforms.push({x: i + 40, y: 260, w: 40, h: 40, t: 'q', contains: boxType});
+        } else if (rand < 0.35) { 
+            platforms.push({x: i + 30, y: 375, w: 40, h: 25, t: 's'}); 
+        } else if (rand < 0.55) { 
+            platforms.push({x: i, y: 330, w: 60, h: 70, t: 'p'});
+            enemies.push({x: i + 120, y: 360, dx: -1.5, dead: false, r:[i-100, i+400]});
+        } else if (rand < 0.75) { 
+            platforms.push({x: i, y: 220, w: 120, h: 40, t: 'w'});
+        }
+    }
+    let goalX = length + 300;
+    platforms.push({x: goalX - 200, y: 400, w: 1000, h: 50, t: 'g'}); 
+    platforms.push({x: goalX + 100, y: 100, w: 10, h: 300, t: 'f'}); 
+    platforms.push({x: goalX + 400, y: 250, w: 140, h: 150, t: 'k'}); 
+    return { platforms, enemies, items, fx, coins, airEnemies };
+}
+
+window.onkeydown = (e) => {
+    keys[e.code] = true;
+    if(e.code === "KeyP" || e.code === "Escape") togglePause();
+};
+window.onkeyup = (e) => keys[e.code] = false;
+
+// LOGIKA SENTUH YANG DIPERBAIKI
+function setupTouch() {
+    const handleTouch = (id, keyCode) => {
+        const el = document.getElementById(id);
+        el.addEventListener('touchstart', (e) => { 
+            e.preventDefault(); 
+            if (audioCtx.state === 'suspended') audioCtx.resume(); 
+            keys[keyCode] = true; 
+        });
+        el.addEventListener('touchend', (e) => { 
+            e.preventDefault(); 
+            keys[keyCode] = false; 
+        });
+    };
+    handleTouch('btnLeft', 'ArrowLeft');
+    handleTouch('btnRight', 'ArrowRight');
+    handleTouch('btnJump', 'Space');
+}
+setupTouch();
+
+function resetPlayer(hardReset = false) {
+    if(hardReset) { 
+        lives--; 
+        updateHUD();
+        if(lives > 0) playSound('hurt');
+    }
+    if(lives <= 0) {
+        gameState = "GAMEOVER";
+        playSound('gameover');
+        document.getElementById("finalScore").innerText = "SKOR AKHIR: " + score;
+        document.getElementById("game-over-overlay").style.display = "flex";
+        return;
+    }
+    player.x = 100; player.y = 100; player.dy = 0; player.dx = 0;
+    player.invul = 100;
+    player.isBig = false;
+    player.canDoubleJump = false;
+    cameraX = 0;
+    document.getElementById("msg").style.display = "none";
+}
+
+function update() {
+    if (gameState !== "PLAY" && gameState !== "VICTORY") return;
+    animTimer++;
+    
+    if (gameState === "VICTORY") { handleVictory(); return; }
+    if (player.invul > 0) player.invul--;
+
+    if (keys["ArrowRight"]) { player.dx = 4.5; player.facing = "right"; }
+    else if (keys["ArrowLeft"]) { player.dx = -4.5; player.facing = "left"; }
+    else player.dx *= 0.8;
+
+    if (keys["Space"] || keys["ArrowUp"]) {
+        if (player.grounded) { 
+            player.dy = player.jump; 
+            player.grounded = false; 
+            player.canDoubleJump = true; 
+            playSound('jump');
+            keys["Space"] = false; keys["ArrowUp"] = false;
+        } else if (player.canDoubleJump) {
+            player.dy = player.jump * 0.85; 
+            player.canDoubleJump = false; 
+            playSound('doubleJump');
+            for(let i=0; i<5; i++) {
+                particles.push({x: player.x + 15, y: player.y + 30, dx: (Math.random()-0.5)*4, dy: Math.random()*2, life: 20, color: "white"});
+            }
+            keys["Space"] = false; keys["ArrowUp"] = false;
+        }
+    }
+
+    if (player.grounded && Math.abs(player.dx) > 1 && animTimer % 5 === 0) {
+        particles.push({
+            x: player.x + (player.dx > 0 ? 0 : 30), 
+            y: player.y + 30, 
+            dx: -player.dx * 0.2, 
+            dy: -Math.random(), 
+            life: 15,
+            color: "rgba(255,255,255,0.6)"
+        });
+    }
+
+    player.dy += gravity; 
+    player.x += player.dx; 
+    player.y += player.dy;
+    
+    if (player.x > 300) cameraX = player.x - 300;
+
+    player.grounded = false;
+
+    world.platforms.forEach((p) => {
+        if (player.x < p.x + p.w && player.x + player.w > p.x && player.y < p.y + p.h && player.y + player.h > p.y) {
+            if (p.t === 'f') { 
+                gameState = "VICTORY"; 
+                player.victoryTimer = 0; 
+                player.dx = 0;
+                playSound('powerup');
+                document.getElementById("msg").style.display = "block"; 
+                return; 
+            }
+            if (p.t === 's' && player.invul === 0) {
+                if(player.isBig) { player.isBig = false; player.invul = 60; player.dy = -5; playSound('hurt');}
+                else resetPlayer(true);
+            }
+            if (player.dy > 0 && player.y + player.h - player.dy <= p.y + 10) {
+                player.dy = 0; player.y = p.y - player.h; player.grounded = true;
+            } 
+            else if (player.dy < 0 && player.y - player.dy >= p.y + p.h - 10) {
+                player.dy = 2; player.y = p.y + p.h;
+                if (p.t === 'q') {
+                    if (p.contains === 'c') {
+                        coinCount++; score += 200;
+                        playSound('coin');
+                        world.fx.push({x: p.x + 10, y: p.y - 20, timer: 20, txt: "♥"});
+                    } else if (p.contains === 'm') {
+                        world.items.push({x: p.x, y: p.y, targetY: p.y-40, active:true});
+                    }
+                    p.t = 'b';
+                    updateHUD();
+                }
+            }
+        }
+    });
+
+    world.airEnemies.forEach(en => {
+        if(!en.dead) {
+            en.y += en.dy;
+            if(Math.abs(en.y - en.baseY) > 50) en.dy *= -1;
+            if (player.x < en.x + 30 && player.x + player.w > en.x && player.y < en.y + 30 && player.y + player.h > en.y) {
+                if (player.dy > 0) { 
+                    en.dead = true; player.dy = -8; score += 700; updateHUD(); 
+                    playSound('stomp');
+                } else if (player.invul === 0) {
+                    if (player.isBig) { player.isBig = false; player.invul = 100; playSound('hurt'); }
+                    else resetPlayer(true);
+                }
+            }
+        }
+    });
+
+    world.enemies.forEach(en => {
+        if (!en.dead) {
+            en.x += en.dx; if(en.x < en.r[0] || en.x > en.r[1]) en.dx *= -1;
+            if (player.x < en.x + 30 && player.x + player.w > en.x && player.y < en.y + 30 && player.y + player.h > en.y) {
+                if (player.dy > 0) { 
+                    en.dead = true; player.dy = -8; score += 500; updateHUD(); 
+                    playSound('stomp');
+                } 
+                else if (player.invul === 0) {
+                    if (player.isBig) { player.isBig = false; player.invul = 100; playSound('hurt'); }
+                    else resetPlayer(true);
+                }
+            }
+        }
+    });
+
+    world.items.forEach(it => {
+        if(it.active && player.x < it.x+40 && player.x+player.w > it.x && player.y < it.y+40 && player.y+player.h > it.y) {
+            player.isBig = true; it.active = false; score += 1000; updateHUD();
+            playSound('powerup');
+            world.fx.push({x: player.x, y: player.y, timer: 30, txt: "BIG!"});
+        }
+    });
+
+    world.coins.forEach(c => {
+        if (!c.gathered && player.x < c.x + 25 && player.x + player.w > c.x && player.y < c.y + 25 && player.y + player.h > c.y) {
+            c.gathered = true; coinCount++; score += 100; updateHUD();
+            playSound('coin');
+            world.fx.push({x: c.x, y: c.y, timer: 15, txt: "♥"});
+        }
+    });
+
+    if (player.y > canvas.height) resetPlayer(true);
+}
+
+function handleVictory() {
+    player.victoryTimer++;
+    if (player.y + player.h < 400) player.y += 3;
+    else { player.x += 2; player.facing = "right"; }
+
+    if (player.victoryTimer > 180) {
+        currentLvl++;
+        document.getElementById("lvlDisplay").innerText = `1-${currentLvl}`;
+        world = generateLevel(currentLvl);
+        resetPlayer();
+        updateHUD();
+        gameState = "PLAY";
+    }
+}
+
+function draw() {
+    ctx.clearRect(0,0,canvas.width, canvas.height);
+    clouds.forEach(c => {
+        c.x -= c.speed;
+        let cx = (c.x - cameraX * 0.2) % 3000;
+        ctx.fillStyle = "white";
+        ctx.beginPath(); ctx.arc(cx, c.y, 20*c.s, 0, 2*Math.PI); ctx.arc(cx+20, c.y-10, 25*c.s, 0, 2*Math.PI); ctx.arc(cx+40, c.y, 20*c.s, 0, 2*Math.PI); ctx.fill();
+    });
+
+    if(gameStarted) {
+        ctx.save();
+        ctx.translate(-cameraX, 0);
+
+        particles.forEach((p, index) => {
+            p.x += p.dx; p.y += p.dy; p.life--;
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.life/5, 0, Math.PI*2); ctx.fill();
+            if(p.life <= 0) particles.splice(index, 1);
+        });
+
+        world.platforms.forEach(p => {
+            if (p.t === 'g') { ctx.fillStyle = "#ff9ff3"; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.fillStyle = "#feca57"; ctx.fillRect(p.x, p.y, p.w, 8); }
+            else if (p.t === 'q') { ctx.fillStyle = "#ffd32a"; ctx.beginPath(); ctx.roundRect(p.x, p.y, p.w, p.h, 8); ctx.fill(); ctx.fillStyle = "white"; ctx.font = "bold 24px Arial"; ctx.fillText("?", p.x+13, p.y+28); }
+            else if (p.t === 's') { 
+                ctx.fillStyle = "#8d6e63"; 
+                ctx.beginPath(); ctx.moveTo(p.x, p.y + p.h); ctx.lineTo(p.x + p.w/2, p.y); ctx.lineTo(p.x + p.w, p.y + p.h); ctx.fill(); 
+            }
+            else if (p.t === 'p') { ctx.fillStyle = "#1dd1a1"; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.fillStyle = "#10ac84"; ctx.fillRect(p.x-5, p.y, p.w+10, 20); }
+            else if (p.t === 'f') { ctx.fillStyle = "#576574"; ctx.fillRect(p.x, p.y, 8, p.h); ctx.fillStyle = "#ff6b6b"; let flagY = p.y + (gameState === "VICTORY" ? Math.min(player.victoryTimer*2, 260) : 20); ctx.beginPath(); ctx.moveTo(p.x+8, flagY); ctx.lineTo(p.x+45, flagY+15); ctx.lineTo(p.x+8, flagY+30); ctx.fill(); }
+            else if (p.t === 'k') { ctx.fillStyle = "#ff85a1"; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.fillStyle = "#ff5c8a"; ctx.fillRect(p.x + 40, p.y + 80, 60, 70); for(let i=0; i<3; i++) ctx.fillRect(p.x + (i*55), p.y-25, 30, 25); }
+            else if (p.t === 'b') { ctx.fillStyle = "#bdc3c7"; ctx.beginPath(); ctx.roundRect(p.x, p.y, p.w, p.h, 5); ctx.fill(); }
+            else if (p.t === 'w') { ctx.fillStyle = "#ffb8b8"; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.strokeRect(p.x, p.y, p.w, p.h); }
+        });
+
+        world.coins.forEach(c => {
+            if (!c.gathered) {
+                let spin = Math.abs(Math.sin(animTimer * 0.1)) * 12;
+                ctx.fillStyle = "#f1c40f"; ctx.beginPath(); ctx.ellipse(c.x + 15, c.y + 15, spin, 15, 0, 0, Math.PI * 2); ctx.fill();
+            }
+        });
+
+        world.airEnemies.forEach(en => {
+            if(!en.dead) {
+                ctx.fillStyle = "#ff9ff3"; ctx.beginPath(); ctx.arc(en.x+15, en.y+15, 15, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "white"; ctx.fillRect(en.x-5, en.y+5, 10, 5); ctx.fillRect(en.x+25, en.y+5, 10, 5);
+            }
+        });
+
+        world.enemies.forEach(en => {
+            if(!en.dead) {
+                ctx.fillStyle = "#a29bfe"; ctx.beginPath(); ctx.roundRect(en.x, en.y+10, 30, 30, 10); ctx.fill();
+                ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(en.x+10, en.y+22, 3, 0, Math.PI*2); ctx.arc(en.x+20, en.y+22, 3, 0, Math.PI*2); ctx.fill();
+            }
+        });
+
+        world.items.forEach(it => {
+            if(it.active) {
+                if(it.y > it.targetY) it.y -= 2;
+                ctx.fillStyle = "#ff4d4d"; ctx.beginPath(); ctx.arc(it.x+20, it.y+15, 15, Math.PI, 0); ctx.fill();
+                ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(it.x+15, it.y+8, 4, 0, Math.PI*2); ctx.arc(it.x+25, it.y+8, 4, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "#ffe0bd"; ctx.fillRect(it.x+12, it.y+15, 16, 12);
+            }
+        });
+
+        world.fx.forEach((f, i) => {
+            ctx.fillStyle = "#ff6b81"; ctx.font = "bold 16px Arial"; ctx.fillText(f.txt, f.x, f.y);
+            f.y -= 1; f.timer--; if(f.timer <= 0) world.fx.splice(i, 1);
+        });
+
+        drawCuteMario(player.x, player.y, player.facing === "left", player.isBig, player.invul);
+        ctx.restore();
+    }
+    update();
+    requestAnimationFrame(draw);
+}
+
+function drawCuteMario(x, y, isLeft, isBig, invul) {
+    ctx.save();
+    let bounce = Math.sin(animTimer * 0.15) * 2;
+    let scale = isBig ? 1.5 : 1;
+    ctx.translate(x + 17, y + 17 + (player.grounded ? 0 : bounce));
+    if (isLeft) ctx.scale(-1, 1);
+    ctx.scale(scale, scale);
+    if (invul % 6 < 3) {
+        ctx.fillStyle = "#ff4757"; ctx.beginPath(); ctx.roundRect(-12, -5, 24, 20, 10); ctx.fill();
+        ctx.fillStyle = "#ffe0bd"; ctx.beginPath(); ctx.arc(0, -10, 15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#2f3542"; ctx.beginPath(); ctx.arc(6, -12, 3.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-2, -12, 3.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#ff4757"; ctx.beginPath(); ctx.ellipse(0, -22, 14, 7, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(-14, -22, 28, 4);
+    }
+    ctx.restore();
+}
+
+draw();
+</script>
+</body>
+</html>
